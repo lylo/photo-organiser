@@ -1,11 +1,13 @@
 # Photo Organiser
 
-A Ruby script that automatically organises photos by date into a Lightroom Classic-friendly folder structure. Perfect for organising Lightroom exports or any collection of photos.
+A Ruby script that automatically organises photos by date into a Lightroom Classic-friendly folder structure. Perfect for organising Lightroom exports or any collection of photos. **Copies files by default** to keep your originals safe.
 
 ## Features
 
 - 📅 **Date-based organisation**: Uses EXIF metadata to determine capture date
 - 📁 **Lightroom Classic structure**: Creates `YYYY/MM/YYYY-MM-DD` folder hierarchy
+- 🔒 **Safe by default**: Copies files instead of moving them (preserves originals)
+- 🔄 **Flexible operation**: Option to move files if desired
 - 🔍 **Smart fallback**: Uses file modification time when EXIF data is unavailable
 - 🧪 **Dry run mode**: Preview changes before applying them
 - 🔄 **Flexible overwrite**: Option to overwrite existing files
@@ -60,13 +62,13 @@ If you have a large photo collection (1000+ photos per year), it's recommended t
 
 2. **Run the organiser for each year**:
    ```bash
-   # Organise 2024 photos
+   # Copy photos (safe, preserves originals)
    bundle exec ruby photo-organiser.rb ~/Photos/Export/2024 ~/Photos/Organised --dry-run
    bundle exec ruby photo-organiser.rb ~/Photos/Export/2024 ~/Photos/Organised
 
-   # Organise 2023 photos
-   bundle exec ruby photo-organiser.rb ~/Photos/Export/2023 ~/Photos/Organised --dry-run
-   bundle exec ruby photo-organiser.rb ~/Photos/Export/2023 ~/Photos/Organised
+   # Or move photos if you want to clean up the export folder
+   bundle exec ruby photo-organiser.rb ~/Photos/Export/2024 ~/Photos/Organised --move --dry-run
+   bundle exec ruby photo-organiser.rb ~/Photos/Export/2024 ~/Photos/Organised --move
    ```
 
 3. **Clean up**: Remove the temporary export folders after successful organisation
@@ -84,12 +86,17 @@ This approach:
 bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --dry-run
 ```
 
-**Organise photos:**
+**Copy photos to organised structure (default, safe):**
 ```bash
 bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised
 ```
 
-**Organise with overwrite protection off:**
+**Move photos instead of copying:**
+```bash
+bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --move
+```
+
+**Copy with overwrite protection off:**
 ```bash
 bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --force
 ```
@@ -98,7 +105,9 @@ bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --force
 
 | Option | Description |
 |--------|-------------|
-| `--dry-run` | Show what would be moved without actually moving files |
+| `--copy` | Copy files to destination (default) |
+| `--move` | Move files to destination instead of copying |
+| `--dry-run` | Show what would be done without actually doing it |
 | `--force` | Overwrite existing files in destination |
 | `--help`, `-h` | Show help message |
 | `--version`, `-v` | Show version information |
@@ -136,7 +145,7 @@ This structure is compatible with:
 2. **Reads EXIF data** to find the original capture date
 3. **Falls back** to file modification time if no EXIF date exists
 4. **Creates** the destination folder structure (`YYYY/MM/YYYY-MM-DD`)
-5. **Moves** files to their appropriate date-based folders
+5. **Copies** files to their appropriate date-based folders (or moves if `--move` specified)
 6. **Reports** progress and provides a summary
 
 ## Supported File Formats

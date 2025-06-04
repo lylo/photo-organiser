@@ -2,13 +2,13 @@
 # Photo Organiser - Organise photos by date into Lightroom Classic-friendly structure
 # MIT License - See LICENSE file for details
 
-require "fileutils"
-require "mini_exiftool"
-require "optparse"
+require 'fileutils'
+require 'mini_exiftool'
+require 'optparse'
 
 def show_help
   puts <<~HELP
-    Photo Organiser v1.0.0
+    Photo Organiser v1.1.0
     =====================
 
     Organise photos by date into a Lightroom Classic-friendly folder structure.
@@ -22,7 +22,9 @@ def show_help
       destination_directory Directory where organised photos will be placed
 
     OPTIONS
-      --dry-run            Show what would be moved without actually moving files
+      --copy               Copy files to destination (default)
+      --move               Move files to destination instead of copying
+      --dry-run            Show what would be done without actually doing it
       --force              Overwrite existing files in destination
       --help, -h           Show this help message
       --version, -v        Show version information
@@ -31,10 +33,13 @@ def show_help
       # Organise photos with dry run to preview changes
       bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --dry-run
 
-      # Actually organise the photos
+      # Copy photos to organised structure (default behaviour)
       bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised
 
-      # Organise and overwrite existing files
+      # Move photos instead of copying
+      bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --move
+
+      # Copy and overwrite existing files
       bundle exec ruby photo-organiser.rb ~/Photos/Export ~/Photos/Organised --force
 
     FOLDER STRUCTURE
@@ -57,27 +62,35 @@ def show_help
 end
 
 def show_version
-  puts "Photo Organiser v1.0.0"
-  puts "MIT License"
+  puts 'Photo Organiser v1.1.0'
+  puts 'MIT License'
 end
 
 # Parse command line arguments
 options = {}
 OptionParser.new do |opts|
-  opts.on("--dry-run", "Show what would be moved without actually moving files") do
+  opts.on('--copy', 'Copy files to destination (default)') do
+    options[:copy] = true
+  end
+
+  opts.on('--move', 'Move files to destination instead of copying') do
+    options[:move] = true
+  end
+
+  opts.on('--dry-run', 'Show what would be done without actually doing it') do
     options[:dry_run] = true
   end
 
-  opts.on("--force", "Overwrite existing files in destination") do
+  opts.on('--force', 'Overwrite existing files in destination') do
     options[:force] = true
   end
 
-  opts.on("-h", "--help", "Show help message") do
+  opts.on('-h', '--help', 'Show help message') do
     show_help
     exit
   end
 
-  opts.on("-v", "--version", "Show version") do
+  opts.on('-v', '--version', 'Show version') do
     show_version
     exit
   end
@@ -90,10 +103,18 @@ if ARGV.length < 2
   exit 1
 end
 
+# Check for conflicting options
+if options[:copy] && options[:move]
+  puts "Error: Cannot specify both --copy and --move\n\n"
+  show_help
+  exit 1
+end
+
 SOURCE_DIR = ARGV[0]
 DEST_DIR = ARGV[1]
 DRY_RUN = options[:dry_run] || false
 FORCE_OVERWRITE = options[:force] || false
+MOVE_FILES = options[:move] || false # Default to copy unless --move specified
 
 # Validate directories
 unless File.directory?(SOURCE_DIR)
@@ -107,11 +128,12 @@ FileUtils.mkdir_p(DEST_DIR) unless DRY_RUN
 puts "Source: #{SOURCE_DIR}"
 puts "Destination: #{DEST_DIR}"
 puts "Mode: #{DRY_RUN ? 'DRY RUN' : 'LIVE'}"
+puts "Operation: #{MOVE_FILES ? 'MOVE' : 'COPY'}"
 puts "Force overwrite: #{FORCE_OVERWRITE ? 'YES' : 'NO'}"
-puts "=" * 50
+puts '=' * 50
 
 # Get all files (not directories) from source
-files = Dir.glob(File.join(SOURCE_DIR, "*")).select { |f| File.file?(f) }
+files = Dir.glob(File.join(SOURCE_DIR, '*')).select { |f| File.file?(f) }
 puts "Found #{files.length} files to process\n\n"
 
 processed = 0
@@ -119,57 +141,65 @@ skipped = 0
 errors = 0
 
 files.each_with_index do |file, index|
-  begin
-    # Show progress
-    print "\rProcessing #{index + 1}/#{files.length}: #{File.basename(file)}"
+  # Show progress
+  print "\rProcessing #{index + 1}/#{files.length}: #{File.basename(file)}"
 
-    # Extract capture date from EXIF metadata
-    exif = MiniExiftool.new(file)
-    capture_date = exif.date_time_original || exif.create_date
+  # Extract capture date from EXIF metadata
+  exif = MiniExiftool.new(file)
+  capture_date = exif.date_time_original || exif.create_date
 
-    # Fallback: Use file modification time if EXIF date is unavailable
-    capture_date ||= File.mtime(file)
+  # Fallback: Use file modification time if EXIF date is unavailable
+  capture_date ||= File.mtime(file)
 
-    raise "No valid date found" unless capture_date
+  raise 'No valid date found' unless capture_date
 
-    # Format folder structure to match Lightroom Classic
-    year  = capture_date.strftime("%Y")
-    month = capture_date.strftime("%m") # Two-digit month
-    day   = capture_date.strftime("%Y-%m-%d")
+  # Format folder structure to match Lightroom Classic
+  year  = capture_date.strftime('%Y')
+  month = capture_date.strftime('%m') # Two-digit month
+  day   = capture_date.strftime('%Y-%m-%d')
 
-    target_folder = File.join(DEST_DIR, year, month, day)
-    target_path   = File.join(target_folder, File.basename(file))
+  target_folder = File.join(DEST_DIR, year, month, day)
+  target_path   = File.join(target_folder, File.basename(file))
 
-    overwrite = File.exist?(target_path) && FORCE_OVERWRITE
+  overwrite = File.exist?(target_path) && FORCE_OVERWRITE
+  operation = MOVE_FILES ? 'move' : 'copy'
 
-    if DRY_RUN
-      puts "\n[DRY RUN] Would move: #{file} -> #{target_path} (overwrite: #{overwrite})"
-      processed += 1
-    else
-      FileUtils.mkdir_p(target_folder)
-      if overwrite
+  if DRY_RUN
+    puts "\n[DRY RUN] Would #{operation}: #{file} -> #{target_path} (overwrite: #{overwrite})"
+    processed += 1
+  else
+    FileUtils.mkdir_p(target_folder)
+    if overwrite
+      if MOVE_FILES
         FileUtils.mv(file, target_path, force: true)
         puts "\nMoved: #{file} -> #{target_path} (overwritten)"
-        processed += 1
-      elsif !File.exist?(target_path)
+      else
+        FileUtils.cp(file, target_path)
+        puts "\nCopied: #{file} -> #{target_path} (overwritten)"
+      end
+      processed += 1
+    elsif !File.exist?(target_path)
+      if MOVE_FILES
         FileUtils.mv(file, target_path)
         puts "\nMoved: #{file} -> #{target_path}"
-        processed += 1
       else
-        puts "\nSkipping (already exists): #{file}"
-        skipped += 1
+        FileUtils.cp(file, target_path)
+        puts "\nCopied: #{file} -> #{target_path}"
       end
+      processed += 1
+    else
+      puts "\nSkipping (already exists): #{file}"
+      skipped += 1
     end
-
-  rescue => e
-    puts "\nError processing #{file}: #{e.message}"
-    errors += 1
   end
+rescue StandardError => e
+  puts "\nError processing #{file}: #{e.message}"
+  errors += 1
 end
 
-puts "\n\n" + "=" * 50
-puts "SUMMARY"
-puts "=" * 50
+puts "\n\n" + '=' * 50
+puts 'SUMMARY'
+puts '=' * 50
 puts "Files processed: #{processed}"
 puts "Files skipped: #{skipped}"
 puts "Errors: #{errors}"
